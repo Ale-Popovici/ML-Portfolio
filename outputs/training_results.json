@@ -1,0 +1,74 @@
+{
+  "lightgbm": {
+    "model_name": "lightgbm",
+    "metrics": {
+      "rmse": 0.1932972027578043,
+      "mae": 0.027882641395041808,
+      "r2": 0.9934309294857496,
+      "zero_f1": 0.9996684716543265
+    },
+    "zero_rate_actual": 0.6465714285714286,
+    "zero_rate_predicted": 0.5342142857142858,
+    "category_performance": {
+      "HOBBIES": {
+        "model_name": "category_HOBBIES",
+        "metrics": {
+          "rmse": 0.1932972027578043,
+          "mae": 0.027882641395041808,
+          "r2": 0.9934309294857496,
+          "zero_f1": 0.9996684716543265
+        },
+        "zero_rate_actual": 0.6465714285714286,
+        "zero_rate_predicted": 0.5342142857142858
+      }
+    }
+  },
+  "xgboost": {
+    "model_name": "xgboost",
+    "metrics": {
+      "rmse": 0.1431922879569534,
+      "mae": 0.028915559872984886,
+      "r2": 0.9963951110839844,
+      "zero_f1": 0.9993927684239581
+    },
+    "zero_rate_actual": 0.6465714285714286,
+    "zero_rate_predicted": 0.3640357142857143,
+    "category_performance": {
+      "HOBBIES": {
+        "model_name": "category_HOBBIES",
+        "metrics": {
+          "rmse": 0.1431922879569534,
+          "mae": 0.028915559872984886,
+          "r2": 0.9963951110839844,
+          "zero_f1": 0.9993927684239581
+        },
+        "zero_rate_actual": 0.6465714285714286,
+        "zero_rate_predicted": 0.3640357142857143
+      }
+    }
+  },
+  "ensemble": {
+    "model_name": "ensemble",
+    "metrics": {
+      "rmse": 0.7858238223366765,
+      "mae": 0.2705982497169218,
+      "r2": 0.8914316679312764,
+      "zero_f1": 0.9995030918727915
+    },
+    "zero_rate_actual": 0.6465714285714286,
+    "zero_rate_predicted": 0.3127142857142857,
+    "category_performance": {
+      "HOBBIES": {
+        "model_name": "category_HOBBIES",
+        "metrics": {
+          "rmse": 0.7858238223366765,
+          "mae": 0.2705982497169218,
+          "r2": 0.8914316679312764,
+          "zero_f1": 0.9995030918727915
+        },
+        "zero_rate_actual": 0.6465714285714286,
+        "zero_rate_predicted": 0.3127142857142857
+      }
+    }
+  }
+}

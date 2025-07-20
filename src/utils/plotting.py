@@ -1,5 +1,9 @@
-# Visualization and Plotting for Demand Forecasting
-# Path: src/utils/plotting.py
+# Utilities and Logging Configuration
+# This file contains both plotting utilities and logging configuration
+
+# =============================================================================
+# File: src/utils/plotting.py
+# =============================================================================
 
 import pandas as pd
 import numpy as np
@@ -8,606 +12,373 @@ import seaborn as sns
 import plotly.graph_objects as go
 import plotly.express as px
 from plotly.subplots import make_subplots
-import plotly.figure_factory as ff
-from typing import Dict, List, Tuple, Optional, Union
+from typing import Dict, List, Optional, Any
 import logging
-import os
-from pathlib import Path
-
-# Set style
-plt.style.use('seaborn-v0_8')
-sns.set_palette("husl")
 
 logger = logging.getLogger(__name__)
 
 class DemandForecastingVisualizer:
-    """Comprehensive visualization for demand forecasting project"""
+    """
+    Visualization utilities for M5 demand forecasting
+    Designed for intermittent demand patterns (68.2% zeros)
+    """
     
-    def __init__(self, output_dir: str = "outputs/visualizations"):
-        self.output_dir = Path(output_dir)
-        self.output_dir.mkdir(parents=True, exist_ok=True)
-        
-        # Default figure settings
-        self.figsize = (15, 8)
-        self.colors = px.colors.qualitative.Set3
-        
-    def plot_time_series(self, df: pd.DataFrame, date_col: str = 'date', 
-                        value_col: str = 'demand', group_col: str = None,
-                        title: str = "Time Series Analysis", 
-                        save_name: str = None, interactive: bool = True) -> Union[plt.Figure, go.Figure]:
-        """Plot time series data"""
-        
-        if interactive:
-            return self._plot_time_series_plotly(df, date_col, value_col, group_col, title, save_name)
-        else:
-            return self._plot_time_series_matplotlib(df, date_col, value_col, group_col, title, save_name)
+    def __init__(self, style: str = "seaborn-v0_8", figsize: tuple = (12, 8)):
+        plt.style.use(style)
+        self.figsize = figsize
+        self.colors = ['#1f77b4', '#ff7f0e', '#2ca02c', '#d62728', '#9467bd', '#8c564b']
     
-    def _plot_time_series_plotly(self, df: pd.DataFrame, date_col: str, value_col: str, 
-                                group_col: str, title: str, save_name: str) -> go.Figure:
-        """Interactive time series plot with Plotly"""
+    def plot_model_comparison(self, results: Dict[str, Dict], save_path: str = None) -> plt.Figure:
+        """Plot comparison of multiple models"""
         
-        df = df.copy()
-        df[date_col] = pd.to_datetime(df[date_col])
+        fig, axes = plt.subplots(2, 2, figsize=(16, 12))
+        fig.suptitle('Model Performance Comparison', fontsize=16, fontweight='bold')
         
-        if group_col and group_col in df.columns:
-            # Multiple series
-            fig = px.line(df, x=date_col, y=value_col, color=group_col,
-                         title=title, template='plotly_white')
+        # Extract metrics
+        models = list(results.keys())
+        rmse_values = [results[m]['metrics']['rmse'] for m in models]
+        mae_values = [results[m]['metrics']['mae'] for m in models]
+        zero_f1_values = [results[m]['metrics']['zero_f1'] for m in models]
+        service_levels = [results[m].get('business_impact', {}).get('average_service_level', 0) for m in models]
+        
+        # RMSE comparison
+        bars1 = axes[0, 0].bar(models, rmse_values, color=self.colors[:len(models)])
+        axes[0, 0].set_title('Root Mean Squared Error')
+        axes[0, 0].set_ylabel('RMSE')
+        axes[0, 0].tick_params(axis='x', rotation=45)
+        
+        # Add value labels on bars
+        for bar, value in zip(bars1, rmse_values):
+            axes[0, 0].text(bar.get_x() + bar.get_width()/2, bar.get_height() + 0.01,
+                           f'{value:.3f}', ha='center', va='bottom')
+        
+        # MAE comparison
+        bars2 = axes[0, 1].bar(models, mae_values, color=self.colors[:len(models)])
+        axes[0, 1].set_title('Mean Absolute Error')
+        axes[0, 1].set_ylabel('MAE')
+        axes[0, 1].tick_params(axis='x', rotation=45)
+        
+        for bar, value in zip(bars2, mae_values):
+            axes[0, 1].text(bar.get_x() + bar.get_width()/2, bar.get_height() + 0.01,
+                           f'{value:.3f}', ha='center', va='bottom')
+        
+        # Zero prediction F1 score
+        bars3 = axes[1, 0].bar(models, zero_f1_values, color=self.colors[:len(models)])
+        axes[1, 0].set_title('Zero Prediction F1 Score')
+        axes[1, 0].set_ylabel('F1 Score')
+        axes[1, 0].tick_params(axis='x', rotation=45)
+        
+        for bar, value in zip(bars3, zero_f1_values):
+            axes[1, 0].text(bar.get_x() + bar.get_width()/2, bar.get_height() + 0.01,
+                           f'{value:.3f}', ha='center', va='bottom')
+        
+        # Service level (if available)
+        if any(sl > 0 for sl in service_levels):
+            bars4 = axes[1, 1].bar(models, service_levels, color=self.colors[:len(models)])
+            axes[1, 1].set_title('Service Level')
+            axes[1, 1].set_ylabel('Service Level')
+            axes[1, 1].tick_params(axis='x', rotation=45)
+            axes[1, 1].set_ylim(0, 1)
+            
+            for bar, value in zip(bars4, service_levels):
+                axes[1, 1].text(bar.get_x() + bar.get_width()/2, bar.get_height() + 0.01,
+                               f'{value:.3f}', ha='center', va='bottom')
         else:
-            # Single series
-            fig = go.Figure()
-            fig.add_trace(go.Scatter(
-                x=df[date_col], y=df[value_col],
-                mode='lines', name=value_col,
-                line=dict(color='#1f77b4', width=2)
-            ))
-            fig.update_layout(title=title, template='plotly_white')
-        
-        fig.update_xaxes(title_text="Date")
-        fig.update_yaxes(title_text=value_col.replace('_', ' ').title())
-        fig.update_layout(
-            height=600,
-            hovermode='x unified',
-            legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1)
-        )
-        
-        if save_name:
-            save_path = self.output_dir / f"{save_name}.html"
-            fig.write_html(save_path)
-            logger.info(f"Interactive plot saved to {save_path}")
-        
-        return fig
-    
-    def _plot_time_series_matplotlib(self, df: pd.DataFrame, date_col: str, value_col: str, 
-                                   group_col: str, title: str, save_name: str) -> plt.Figure:
-        """Static time series plot with Matplotlib"""
-        
-        df = df.copy()
-        df[date_col] = pd.to_datetime(df[date_col])
-        
-        fig, ax = plt.subplots(figsize=self.figsize)
-        
-        if group_col and group_col in df.columns:
-            # Multiple series
-            for i, group in enumerate(df[group_col].unique()):
-                group_data = df[df[group_col] == group]
-                ax.plot(group_data[date_col], group_data[value_col], 
-                       label=group, linewidth=2)
-            ax.legend()
-        else:
-            # Single series
-            ax.plot(df[date_col], df[value_col], linewidth=2, color='#1f77b4')
-        
-        ax.set_title(title, fontsize=16, fontweight='bold')
-        ax.set_xlabel("Date", fontsize=12)
-        ax.set_ylabel(value_col.replace('_', ' ').title(), fontsize=12)
-        ax.grid(True, alpha=0.3)
-        
-        plt.xticks(rotation=45)
-        plt.tight_layout()
-        
-        if save_name:
-            save_path = self.output_dir / f"{save_name}.png"
-            plt.savefig(save_path, dpi=300, bbox_inches='tight')
-            logger.info(f"Plot saved to {save_path}")
-        
-        return fig
-    
-    def plot_sales_heatmap(self, df: pd.DataFrame, date_col: str = 'date',
-                          value_col: str = 'demand', freq: str = 'M',
-                          title: str = "Sales Heatmap", save_name: str = None) -> plt.Figure:
-        """Create sales heatmap by time periods"""
-        
-        df = df.copy()
-        df[date_col] = pd.to_datetime(df[date_col])
-        
-        # Aggregate data
-        if freq == 'M':
-            df['period'] = df[date_col].dt.to_period('M')
-            df['year'] = df[date_col].dt.year
-            df['month'] = df[date_col].dt.month
-            pivot_data = df.groupby(['year', 'month'])[value_col].sum().unstack(fill_value=0)
-        elif freq == 'W':
-            df['year'] = df[date_col].dt.year
-            df['week'] = df[date_col].dt.isocalendar().week
-            pivot_data = df.groupby(['year', 'week'])[value_col].sum().unstack(fill_value=0)
-        else:
-            df['year'] = df[date_col].dt.year
-            df['day'] = df[date_col].dt.dayofyear
-            pivot_data = df.groupby(['year', 'day'])[value_col].sum().unstack(fill_value=0)
-        
-        # Create heatmap
-        fig, ax = plt.subplots(figsize=(16, 8))
-        
-        sns.heatmap(pivot_data, annot=False, cmap='YlOrRd', cbar_kws={'label': value_col.title()})
-        
-        ax.set_title(title, fontsize=16, fontweight='bold')
-        ax.set_xlabel(f"{'Month' if freq == 'M' else 'Week' if freq == 'W' else 'Day'}", fontsize=12)
-        ax.set_ylabel("Year", fontsize=12)
+            axes[1, 1].text(0.5, 0.5, 'Service Level\nData Not Available', 
+                           ha='center', va='center', transform=axes[1, 1].transAxes)
         
         plt.tight_layout()
         
-        if save_name:
-            save_path = self.output_dir / f"{save_name}.png"
+        if save_path:
             plt.savefig(save_path, dpi=300, bbox_inches='tight')
-            logger.info(f"Heatmap saved to {save_path}")
         
         return fig
     
-    def plot_forecast_vs_actual(self, y_true: np.ndarray, y_pred: np.ndarray, 
-                               dates: pd.Series = None, model_name: str = "Model",
-                               save_name: str = None, interactive: bool = True) -> Union[plt.Figure, go.Figure]:
-        """Plot forecast vs actual values"""
+    def plot_feature_importance(self, feature_importance: np.ndarray, 
+                               feature_names: List[str], top_n: int = 20,
+                               title: str = "Feature Importance", save_path: str = None) -> plt.Figure:
+        """Plot feature importance"""
         
-        if interactive:
-            return self._plot_forecast_vs_actual_plotly(y_true, y_pred, dates, model_name, save_name)
-        else:
-            return self._plot_forecast_vs_actual_matplotlib(y_true, y_pred, dates, model_name, save_name)
+        # Sort features by importance
+        sorted_idx = np.argsort(feature_importance)[-top_n:]
+        sorted_importance = feature_importance[sorted_idx]
+        sorted_names = [feature_names[i] for i in sorted_idx]
+        
+        fig, ax = plt.subplots(figsize=(10, max(8, top_n * 0.4)))
+        
+        bars = ax.barh(range(len(sorted_names)), sorted_importance, color='steelblue')
+        ax.set_yticks(range(len(sorted_names)))
+        ax.set_yticklabels(sorted_names)
+        ax.set_xlabel('Importance')
+        ax.set_title(title)
+        ax.grid(axis='x', alpha=0.3)
+        
+        # Add value labels
+        for i, (bar, value) in enumerate(zip(bars, sorted_importance)):
+            ax.text(value + max(sorted_importance) * 0.01, bar.get_y() + bar.get_height()/2,
+                   f'{value:.3f}', va='center', ha='left')
+        
+        plt.tight_layout()
+        
+        if save_path:
+            plt.savefig(save_path, dpi=300, bbox_inches='tight')
+        
+        return fig
     
-    def _plot_forecast_vs_actual_plotly(self, y_true: np.ndarray, y_pred: np.ndarray, 
-                                       dates: pd.Series, model_name: str, save_name: str) -> go.Figure:
-        """Interactive forecast vs actual plot"""
+    def plot_prediction_analysis(self, y_true: np.ndarray, y_pred: np.ndarray,
+                                model_name: str = "Model", save_path: str = None) -> plt.Figure:
+        """Plot detailed prediction analysis for intermittent demand"""
         
+        fig, axes = plt.subplots(2, 3, figsize=(18, 12))
+        fig.suptitle(f'{model_name} - Prediction Analysis', fontsize=16, fontweight='bold')
+        
+        # 1. Actual vs Predicted (log scale for better visibility)
+        non_zero_mask = (y_true > 0) | (y_pred > 0)
+        if non_zero_mask.sum() > 0:
+            axes[0, 0].scatter(y_true[non_zero_mask], y_pred[non_zero_mask], alpha=0.6, s=10)
+            max_val = max(y_true.max(), y_pred.max())
+            axes[0, 0].plot([0, max_val], [0, max_val], 'r--', lw=2)
+            axes[0, 0].set_xlabel('Actual (Non-zero only)')
+            axes[0, 0].set_ylabel('Predicted')
+            axes[0, 0].set_title('Actual vs Predicted (Non-zero)')
+            axes[0, 0].set_xscale('log')
+            axes[0, 0].set_yscale('log')
+        
+        # 2. Zero prediction confusion matrix
+        zero_true = (y_true == 0)
+        zero_pred = (y_pred < 0.5)  # Threshold for zero prediction
+        
+        confusion_data = np.array([
+            [(~zero_true & ~zero_pred).sum(), (~zero_true & zero_pred).sum()],
+            [(zero_true & ~zero_pred).sum(), (zero_true & zero_pred).sum()]
+        ])
+        
+        im = axes[0, 1].imshow(confusion_data, cmap='Blues')
+        axes[0, 1].set_xticks([0, 1])
+        axes[0, 1].set_yticks([0, 1])
+        axes[0, 1].set_xticklabels(['Pred: Non-zero', 'Pred: Zero'])
+        axes[0, 1].set_yticklabels(['True: Non-zero', 'True: Zero'])
+        axes[0, 1].set_title('Zero Prediction Analysis')
+        
+        for i in range(2):
+            for j in range(2):
+                axes[0, 1].text(j, i, confusion_data[i, j], ha="center", va="center", 
+                               color="white" if confusion_data[i, j] > confusion_data.max()/2 else "black")
+        
+        # 3. Error distribution
+        errors = y_pred - y_true
+        axes[0, 2].hist(errors, bins=50, alpha=0.7, edgecolor='black')
+        axes[0, 2].axvline(x=0, color='r', linestyle='--')
+        axes[0, 2].set_xlabel('Prediction Error')
+        axes[0, 2].set_ylabel('Frequency')
+        axes[0, 2].set_title('Error Distribution')
+        
+        # 4. Demand intensity comparison
+        true_nonzero = y_true[y_true > 0]
+        pred_nonzero = y_pred[y_pred > 0]
+        
+        if len(true_nonzero) > 0 and len(pred_nonzero) > 0:
+            axes[1, 0].hist(true_nonzero, bins=30, alpha=0.7, label='Actual', density=True)
+            axes[1, 0].hist(pred_nonzero, bins=30, alpha=0.7, label='Predicted', density=True)
+            axes[1, 0].set_xlabel('Non-zero Demand Values')
+            axes[1, 0].set_ylabel('Density')
+            axes[1, 0].set_title('Non-zero Demand Distribution')
+            axes[1, 0].legend()
+            axes[1, 0].set_yscale('log')
+        
+        # 5. Residuals vs Predicted
+        axes[1, 1].scatter(y_pred, errors, alpha=0.5, s=10)
+        axes[1, 1].axhline(y=0, color='r', linestyle='--')
+        axes[1, 1].set_xlabel('Predicted Values')
+        axes[1, 1].set_ylabel('Residuals')
+        axes[1, 1].set_title('Residuals vs Predicted')
+        
+        # 6. Performance by demand level
+        demand_bins = np.quantile(y_true[y_true > 0], [0, 0.25, 0.5, 0.75, 0.9, 1.0]) if (y_true > 0).sum() > 0 else [0, 1]
+        bin_labels = [f'{demand_bins[i]:.1f}-{demand_bins[i+1]:.1f}' for i in range(len(demand_bins)-1)]
+        bin_rmse = []
+        
+        for i in range(len(demand_bins)-1):
+            mask = (y_true >= demand_bins[i]) & (y_true < demand_bins[i+1])
+            if mask.sum() > 0:
+                rmse = np.sqrt(np.mean((y_true[mask] - y_pred[mask])**2))
+                bin_rmse.append(rmse)
+            else:
+                bin_rmse.append(0)
+        
+        if bin_rmse:
+            axes[1, 2].bar(range(len(bin_labels)), bin_rmse, alpha=0.7)
+            axes[1, 2].set_xticks(range(len(bin_labels)))
+            axes[1, 2].set_xticklabels(bin_labels, rotation=45)
+            axes[1, 2].set_xlabel('Demand Range')
+            axes[1, 2].set_ylabel('RMSE')
+            axes[1, 2].set_title('RMSE by Demand Level')
+        
+        plt.tight_layout()
+        
+        if save_path:
+            plt.savefig(save_path, dpi=300, bbox_inches='tight')
+        
+        return fig
+    
+    def create_interactive_dashboard(self, results: Dict[str, Dict], 
+                                   save_path: str = None) -> go.Figure:
+        """Create interactive dashboard with Plotly"""
+        
+        # Create subplots
         fig = make_subplots(
             rows=2, cols=2,
-            subplot_titles=('Time Series Comparison', 'Actual vs Predicted Scatter', 
-                          'Residuals Over Time', 'Residuals Distribution'),
+            subplot_titles=('Model Performance', 'Zero Prediction Accuracy', 
+                          'Error Analysis', 'Business Impact'),
             specs=[[{"secondary_y": False}, {"secondary_y": False}],
                    [{"secondary_y": False}, {"secondary_y": False}]]
         )
         
-        # Prepare data
-        if dates is not None:
-            x_axis = pd.to_datetime(dates)
-        else:
-            x_axis = list(range(len(y_true)))
+        models = list(results.keys())
         
-        residuals = y_true - y_pred
+        # Model performance metrics
+        rmse_values = [results[m]['metrics']['rmse'] for m in models]
+        mae_values = [results[m]['metrics']['mae'] for m in models]
         
-        # Time series comparison
-        fig.add_trace(go.Scatter(x=x_axis, y=y_true, name="Actual", line=dict(color='blue')), row=1, col=1)
-        fig.add_trace(go.Scatter(x=x_axis, y=y_pred, name="Predicted", line=dict(color='red')), row=1, col=1)
-        
-        # Scatter plot
-        fig.add_trace(go.Scatter(x=y_true, y=y_pred, mode='markers', name="Predictions", 
-                                marker=dict(color='green', opacity=0.6)), row=1, col=2)
-        # Perfect prediction line
-        min_val, max_val = min(y_true.min(), y_pred.min()), max(y_true.max(), y_pred.max())
-        fig.add_trace(go.Scatter(x=[min_val, max_val], y=[min_val, max_val], 
-                                mode='lines', name="Perfect Prediction", 
-                                line=dict(color='black', dash='dash')), row=1, col=2)
-        
-        # Residuals over time
-        fig.add_trace(go.Scatter(x=x_axis, y=residuals, mode='markers', name="Residuals",
-                                marker=dict(color='purple', opacity=0.6)), row=2, col=1)
-        fig.add_hline(y=0, line_dash="dash", line_color="black", row=2, col=1)
-        
-        # Residuals distribution
-        fig.add_trace(go.Histogram(x=residuals, name="Residuals Distribution", 
-                                  marker_color='orange', opacity=0.7), row=2, col=2)
-        
-        fig.update_layout(
-            title=f"{model_name} - Forecast Analysis",
-            height=800,
-            template='plotly_white',
-            showlegend=True
-        )
-        
-        if save_name:
-            save_path = self.output_dir / f"{save_name}.html"
-            fig.write_html(save_path)
-            logger.info(f"Forecast analysis saved to {save_path}")
-        
-        return fig
-    
-    def _plot_forecast_vs_actual_matplotlib(self, y_true: np.ndarray, y_pred: np.ndarray, 
-                                          dates: pd.Series, model_name: str, save_name: str) -> plt.Figure:
-        """Static forecast vs actual plot"""
-        
-        fig, axes = plt.subplots(2, 2, figsize=(16, 12))
-        fig.suptitle(f"{model_name} - Forecast Analysis", fontsize=16, fontweight='bold')
-        
-        # Prepare data
-        if dates is not None:
-            x_axis = pd.to_datetime(dates)
-        else:
-            x_axis = list(range(len(y_true)))
-        
-        residuals = y_true - y_pred
-        
-        # Time series comparison
-        axes[0, 0].plot(x_axis, y_true, label='Actual', color='blue', linewidth=2)
-        axes[0, 0].plot(x_axis, y_pred, label='Predicted', color='red', linewidth=2)
-        axes[0, 0].set_title('Time Series Comparison')
-        axes[0, 0].set_xlabel('Date')
-        axes[0, 0].set_ylabel('Value')
-        axes[0, 0].legend()
-        axes[0, 0].grid(True, alpha=0.3)
-        
-        # Scatter plot
-        axes[0, 1].scatter(y_true, y_pred, alpha=0.6, color='green')
-        min_val, max_val = min(y_true.min(), y_pred.min()), max(y_true.max(), y_pred.max())
-        axes[0, 1].plot([min_val, max_val], [min_val, max_val], 'k--', linewidth=2)
-        axes[0, 1].set_title('Actual vs Predicted')
-        axes[0, 1].set_xlabel('Actual')
-        axes[0, 1].set_ylabel('Predicted')
-        axes[0, 1].grid(True, alpha=0.3)
-        
-        # Residuals over time
-        axes[1, 0].scatter(x_axis, residuals, alpha=0.6, color='purple')
-        axes[1, 0].axhline(y=0, color='black', linestyle='--')
-        axes[1, 0].set_title('Residuals Over Time')
-        axes[1, 0].set_xlabel('Date')
-        axes[1, 0].set_ylabel('Residuals')
-        axes[1, 0].grid(True, alpha=0.3)
-        
-        # Residuals distribution
-        axes[1, 1].hist(residuals, bins=50, alpha=0.7, color='orange', edgecolor='black')
-        axes[1, 1].set_title('Residuals Distribution')
-        axes[1, 1].set_xlabel('Residuals')
-        axes[1, 1].set_ylabel('Frequency')
-        axes[1, 1].grid(True, alpha=0.3)
-        
-        plt.tight_layout()
-        
-        if save_name:
-            save_path = self.output_dir / f"{save_name}.png"
-            plt.savefig(save_path, dpi=300, bbox_inches='tight')
-            logger.info(f"Forecast analysis saved to {save_path}")
-        
-        return fig
-    
-    def plot_feature_importance(self, feature_importance: pd.DataFrame, 
-                              top_n: int = 20, title: str = "Feature Importance",
-                              save_name: str = None) -> plt.Figure:
-        """Plot feature importance"""
-        
-        # Get top N features
-        top_features = feature_importance.head(top_n)
-        
-        fig, ax = plt.subplots(figsize=(12, max(8, top_n * 0.4)))
-        
-        # Horizontal bar plot
-        bars = ax.barh(range(len(top_features)), top_features['importance'], color='steelblue')
-        
-        # Customize plot
-        ax.set_yticks(range(len(top_features)))
-        ax.set_yticklabels(top_features['feature'])
-        ax.set_xlabel('Importance')
-        ax.set_title(title, fontsize=16, fontweight='bold')
-        ax.grid(True, alpha=0.3, axis='x')
-        
-        # Add value labels on bars
-        for i, bar in enumerate(bars):
-            width = bar.get_width()
-            ax.text(width, bar.get_y() + bar.get_height()/2, 
-                   f'{width:.3f}', ha='left', va='center', fontsize=10)
-        
-        # Invert y-axis to show most important at top
-        ax.invert_yaxis()
-        
-        plt.tight_layout()
-        
-        if save_name:
-            save_path = self.output_dir / f"{save_name}.png"
-            plt.savefig(save_path, dpi=300, bbox_inches='tight')
-            logger.info(f"Feature importance plot saved to {save_path}")
-        
-        return fig
-    
-    def plot_model_comparison(self, comparison_df: pd.DataFrame, 
-                             metrics: List[str] = None, save_name: str = None) -> go.Figure:
-        """Plot model comparison across metrics"""
-        
-        if metrics is None:
-            metrics = ['RMSE', 'MAE', 'MAPE', 'R²']
-        
-        # Filter available metrics
-        available_metrics = [m for m in metrics if m in comparison_df.columns]
-        
-        if not available_metrics:
-            raise ValueError("No valid metrics found in comparison dataframe")
-        
-        # Create subplot
-        fig = make_subplots(
-            rows=1, cols=len(available_metrics),
-            subplot_titles=available_metrics,
-            shared_yaxes=True
-        )
-        
-        models = comparison_df.index.tolist()
-        colors = px.colors.qualitative.Set3[:len(models)]
-        
-        for i, metric in enumerate(available_metrics):
-            values = comparison_df[metric].values
-            
-            fig.add_trace(
-                go.Bar(x=models, y=values, name=metric, 
-                      marker_color=colors, showlegend=i==0),
-                row=1, col=i+1
-            )
-            
-            # Add value labels
-            for j, val in enumerate(values):
-                fig.add_annotation(
-                    x=models[j], y=val,
-                    text=f'{val:.3f}',
-                    showarrow=False,
-                    yshift=10,
-                    row=1, col=i+1
-                )
-        
-        fig.update_layout(
-            title="Model Performance Comparison",
-            height=600,
-            template='plotly_white'
-        )
-        
-        fig.update_xaxes(tickangle=45)
-        
-        if save_name:
-            save_path = self.output_dir / f"{save_name}.html"
-            fig.write_html(save_path)
-            logger.info(f"Model comparison saved to {save_path}")
-        
-        return fig
-    
-    def plot_business_impact(self, baseline_cost: float, improved_cost: float,
-                           service_levels: Dict[str, float], save_name: str = None) -> go.Figure:
-        """Plot business impact visualization"""
-        
-        fig = make_subplots(
-            rows=2, cols=2,
-            subplot_titles=('Cost Comparison', 'Service Level Improvement', 
-                          'ROI Analysis', 'Savings Breakdown'),
-            specs=[[{"type": "bar"}, {"type": "indicator"}],
-                   [{"type": "bar"}, {"type": "pie"}]]
-        )
-        
-        # Cost comparison
         fig.add_trace(
-            go.Bar(x=['Baseline', 'Improved'], y=[baseline_cost, improved_cost],
-                  marker_color=['red', 'green'], name="Cost"),
+            go.Bar(x=models, y=rmse_values, name='RMSE', marker_color='lightblue'),
             row=1, col=1
         )
         
-        # Service level indicator
-        service_improvement = service_levels.get('improved', 0) - service_levels.get('baseline', 0)
+        # Zero prediction metrics
+        zero_f1_values = [results[m]['metrics']['zero_f1'] for m in models]
         fig.add_trace(
-            go.Indicator(
-                mode="gauge+number+delta",
-                value=service_levels.get('improved', 0),
-                delta={'reference': service_levels.get('baseline', 0)},
-                gauge={'axis': {'range': [80, 100]},
-                      'bar': {'color': "darkblue"},
-                      'steps': [{'range': [80, 90], 'color': "lightgray"},
-                               {'range': [90, 100], 'color': "gray"}],
-                      'threshold': {'line': {'color': "red", 'width': 4},
-                                  'thickness': 0.75, 'value': 95}},
-                title={'text': "Service Level %"}
-            ),
+            go.Bar(x=models, y=zero_f1_values, name='Zero F1', marker_color='lightgreen'),
             row=1, col=2
         )
         
-        # ROI analysis
-        cost_savings = baseline_cost - improved_cost
-        roi_pct = (cost_savings / baseline_cost) * 100 if baseline_cost > 0 else 0
-        
-        fig.add_trace(
-            go.Bar(x=['Cost Savings %'], y=[roi_pct],
-                  marker_color=['gold'], name="ROI"),
-            row=2, col=1
-        )
-        
-        # Savings breakdown (example)
-        fig.add_trace(
-            go.Pie(labels=['Inventory Reduction', 'Stockout Prevention', 'Labor Efficiency'],
-                  values=[cost_savings * 0.6, cost_savings * 0.3, cost_savings * 0.1]),
-            row=2, col=2
-        )
-        
+        # Add more interactive elements as needed
         fig.update_layout(
-            title="Business Impact Analysis",
-            height=800,
-            template='plotly_white'
+            title_text="M5 Demand Forecasting - Model Performance Dashboard",
+            showlegend=False,
+            height=800
         )
         
-        if save_name:
-            save_path = self.output_dir / f"{save_name}.html"
+        if save_path:
             fig.write_html(save_path)
-            logger.info(f"Business impact visualization saved to {save_path}")
-        
-        return fig
-    
-    def create_executive_dashboard(self, results: Dict, save_name: str = "executive_dashboard") -> go.Figure:
-        """Create comprehensive executive dashboard"""
-        
-        fig = make_subplots(
-            rows=3, cols=3,
-            subplot_titles=['Model Performance', 'Forecast Accuracy', 'Business Impact',
-                          'Service Level', 'Cost Savings', 'Feature Importance',
-                          'Prediction Trend', 'Error Distribution', 'ROI Timeline'],
-            specs=[[{"type": "bar"}, {"type": "scatter"}, {"type": "indicator"}],
-                   [{"type": "indicator"}, {"type": "bar"}, {"type": "bar"}],
-                   [{"type": "scatter"}, {"type": "histogram"}, {"type": "scatter"}]]
-        )
-        
-        # Extract data from results
-        comparison_df = results.get('comparison', pd.DataFrame())
-        best_model = results.get('best_model', 'Unknown')
-        
-        if not comparison_df.empty:
-            # Model performance
-            models = comparison_df.index[:5]  # Top 5 models
-            rmse_values = comparison_df['RMSE'][:5] if 'RMSE' in comparison_df.columns else [0]*5
-            
-            fig.add_trace(
-                go.Bar(x=models, y=rmse_values, marker_color='steelblue'),
-                row=1, col=1
-            )
-            
-            # Add more visualizations based on available data
-            # This is a template - you would customize based on actual results structure
-        
-        fig.update_layout(
-            title=f"Demand Forecasting Executive Dashboard - Best Model: {best_model}",
-            height=1200,
-            template='plotly_white',
-            showlegend=False
-        )
-        
-        save_path = self.output_dir / f"{save_name}.html"
-        fig.write_html(save_path)
-        logger.info(f"Executive dashboard saved to {save_path}")
         
         return fig
 
 
 class ReportGenerator:
-    """Generate comprehensive reports with visualizations"""
+    """Generate HTML reports for model training results"""
     
-    def __init__(self, visualizer: DemandForecastingVisualizer):
-        self.visualizer = visualizer
-        
-    def generate_model_report(self, results: Dict, output_path: str = None) -> str:
-        """Generate comprehensive model report"""
-        
-        if output_path is None:
-            output_path = self.visualizer.output_dir / "model_report.html"
-        
-        # Create visualizations
-        comparison_df = results.get('comparison', pd.DataFrame())
-        
-        html_content = f"""
+    def __init__(self):
+        self.template = """
         <!DOCTYPE html>
         <html>
         <head>
-            <title>Demand Forecasting Model Report</title>
+            <title>M5 Demand Forecasting - Model Report</title>
             <style>
-                body {{ font-family: Arial, sans-serif; margin: 40px; line-height: 1.6; }}
-                .header {{ background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); 
-                          color: white; padding: 30px; text-align: center; }}
-                .section {{ margin: 30px 0; padding: 20px; background: #f8f9fa; border-radius: 8px; }}
-                .metric {{ display: inline-block; margin: 10px 15px; padding: 15px; 
-                         background: white; border-radius: 5px; box-shadow: 0 2px 4px rgba(0,0,0,0.1); }}
-                .metric-value {{ font-size: 24px; font-weight: bold; color: #2c3e50; }}
-                .metric-label {{ font-size: 14px; color: #7f8c8d; }}
-                table {{ width: 100%; border-collapse: collapse; margin: 20px 0; }}
-                th, td {{ padding: 12px; text-align: left; border-bottom: 1px solid #ddd; }}
-                th {{ background-color: #3498db; color: white; }}
-                .best-model {{ background-color: #d4edda !important; }}
+                body { font-family: Arial, sans-serif; margin: 40px; }
+                .header { background-color: #f0f8ff; padding: 20px; border-radius: 10px; }
+                .metric { background-color: #f9f9f9; padding: 15px; margin: 10px 0; border-radius: 5px; }
+                .model-section { border-left: 4px solid #4CAF50; padding-left: 20px; margin: 20px 0; }
+                table { border-collapse: collapse; width: 100%; }
+                th, td { border: 1px solid #ddd; padding: 8px; text-align: left; }
+                th { background-color: #f2f2f2; }
+                .best-model { background-color: #e8f5e8; }
             </style>
         </head>
         <body>
             <div class="header">
-                <h1>🎯 Demand Forecasting Model Report</h1>
-                <p>Advanced ML Pipeline for Business Impact</p>
+                <h1>🎯 M5 Demand Forecasting Model Report</h1>
+                <p>Generated on: {timestamp}</p>
             </div>
             
-            <div class="section">
-                <h2>📊 Executive Summary</h2>
-                <div class="metric">
-                    <div class="metric-value">{results.get('best_model', 'N/A')}</div>
-                    <div class="metric-label">Best Model</div>
-                </div>
-                <div class="metric">
-                    <div class="metric-value">{len(comparison_df)}</div>
-                    <div class="metric-label">Models Evaluated</div>
-                </div>
-                <div class="metric">
-                    <div class="metric-value">{comparison_df['RMSE'].min():.4f if 'RMSE' in comparison_df.columns else 'N/A'}</div>
-                    <div class="metric-label">Best RMSE</div>
-                </div>
-                <div class="metric">
-                    <div class="metric-value">{comparison_df['MAPE'].min():.2f}% if 'MAPE' in comparison_df.columns else 'N/A'</div>
-                    <div class="metric-label">Best MAPE</div>
-                </div>
+            <h2>📊 Executive Summary</h2>
+            <div class="metric">
+                <strong>Best Model:</strong> {best_model}<br>
+                <strong>Best RMSE:</strong> {best_rmse:.4f}<br>
+                <strong>Zero Prediction Accuracy:</strong> {best_zero_f1:.3f}<br>
+                <strong>Models Trained:</strong> {num_models}
             </div>
             
-            <div class="section">
-                <h2>🎯 Model Performance Comparison</h2>
-                {comparison_df.to_html(classes='table', table_id='performance_table') if not comparison_df.empty else '<p>No comparison data available</p>'}
-            </div>
+            <h2>📈 Model Performance Comparison</h2>
+            {comparison_table}
             
-            <div class="section">
-                <h2>💰 Business Impact</h2>
-                <p>The improved forecasting model delivers significant business value:</p>
-                <ul>
-                    <li><strong>Inventory Cost Reduction:</strong> 15-25% expected savings</li>
-                    <li><strong>Service Level Improvement:</strong> 5-10% increase in stock availability</li>
-                    <li><strong>Operational Efficiency:</strong> Automated decision making</li>
-                    <li><strong>Risk Mitigation:</strong> Reduced stockout probability</li>
-                </ul>
-            </div>
+            <h2>🔍 Detailed Results</h2>
+            {detailed_results}
             
-            <div class="section">
-                <h2>🔧 Technical Implementation</h2>
-                <h3>Model Architecture:</h3>
-                <ul>
-                    <li>Multi-modal feature engineering (temporal, external signals, business logic)</li>
-                    <li>Advanced ensemble methods with uncertainty quantification</li>
-                    <li>Time series cross-validation for robust evaluation</li>
-                    <li>Production-ready pipeline with monitoring</li>
-                </ul>
-                
-                <h3>Data Sources:</h3>
-                <ul>
-                    <li>Historical sales data (M5 competition dataset)</li>
-                    <li>Weather data integration</li>
-                    <li>Economic indicators</li>
-                    <li>Holiday and promotional events</li>
-                </ul>
+            <h2>💼 Business Impact</h2>
+            <div class="metric">
+                <p>Intermittent demand patterns (68.2% zeros) successfully handled with specialized metrics and model architectures.</p>
+                <p>Recommended deployment: <strong>{best_model}</strong> for production use.</p>
             </div>
-            
-            <div class="section">
-                <h2>📈 Recommendations</h2>
-                <ol>
-                    <li><strong>Deploy Best Model:</strong> Implement {results.get('best_model', 'selected model')} for production forecasting</li>
-                    <li><strong>Monitor Performance:</strong> Set up continuous monitoring for model drift</li>
-                    <li><strong>Retrain Schedule:</strong> Monthly retraining or when performance degrades >5%</li>
-                    <li><strong>Ensemble Strategy:</strong> Consider ensemble of top 3 models for robustness</li>
-                    <li><strong>Feature Enhancement:</strong> Continuously improve external data integration</li>
-                </ol>
-            </div>
-            
         </body>
         </html>
         """
-        
-        with open(output_path, 'w') as f:
-            f.write(html_content)
-        
-        logger.info(f"Model report generated: {output_path}")
-        return str(output_path)
-
-
-def main():
-    """Test visualization module"""
-    logger.info("Visualization module loaded successfully")
     
-    # Test basic functionality
-    visualizer = DemandForecastingVisualizer()
-    logger.info(f"Visualizer created with output directory: {visualizer.output_dir}")
+    def generate_report(self, results: Dict[str, Dict], save_path: str) -> str:
+        """Generate HTML report"""
+        
+        from datetime import datetime
+        
+        # Find best model
+        best_model = min(results.keys(), 
+                        key=lambda x: results[x]['metrics']['rmse'])
+        best_rmse = results[best_model]['metrics']['rmse']
+        best_zero_f1 = results[best_model]['metrics']['zero_f1']
+        
+        # Create comparison table
+        comparison_data = []
+        for model, result in results.items():
+            metrics = result['metrics']
+            comparison_data.append([
+                model,
+                f"{metrics['rmse']:.4f}",
+                f"{metrics['mae']:.4f}",
+                f"{metrics['zero_f1']:.3f}",
+                f"{result.get('zero_rate_predicted', 0):.1%}"
+            ])
+        
+        # Sort by RMSE
+        comparison_data.sort(key=lambda x: float(x[1]))
+        
+        # Create HTML table
+        table_html = "<table><tr><th>Model</th><th>RMSE</th><th>MAE</th><th>Zero F1</th><th>Zero Rate</th></tr>"
+        for i, row in enumerate(comparison_data):
+            row_class = ' class="best-model"' if i == 0 else ''
+            table_html += f"<tr{row_class}>" + "".join(f"<td>{cell}</td>" for cell in row) + "</tr>"
+        table_html += "</table>"
+        
+        # Create detailed results
+        detailed_html = ""
+        for model, result in results.items():
+            metrics = result['metrics']
+            detailed_html += f"""
+            <div class="model-section">
+                <h3>🤖 {model.upper()}</h3>
+                <div class="metric">
+                    <strong>Core Metrics:</strong><br>
+                    RMSE: {metrics['rmse']:.4f} | MAE: {metrics['mae']:.4f} | R²: {metrics.get('r2', 'N/A')}<br>
+                    <strong>Intermittent Demand Metrics:</strong><br>
+                    Zero F1: {metrics['zero_f1']:.3f} | Non-zero RMSE: {metrics.get('nonzero_rmse', 'N/A'):.4f}<br>
+                    Zero Rate (Predicted): {result.get('zero_rate_predicted', 0):.1%}
+                </div>
+            </div>
+            """
+        
+        # Fill template
+        report_html = self.template.format(
+            timestamp=datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+            best_model=best_model.upper(),
+            best_rmse=best_rmse,
+            best_zero_f1=best_zero_f1,
+            num_models=len(results),
+            comparison_table=table_html,
+            detailed_results=detailed_html
+        )
+        
+        # Save report
+        with open(save_path, 'w') as f:
+            f.write(report_html)
+        
+        logger.info(f"Report generated: {save_path}")
+        return save_path
 
-if __name__ == "__main__":
-    main()
