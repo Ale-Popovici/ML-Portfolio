@@ -1,0 +1,24 @@
+version: '3.8'
+
+services:
+  demand-forecasting:
+    build: .
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./data:/app/data
+      - ./models:/app/models
+    environment:
+      - WEATHER_API_KEY=${WEATHER_API_KEY}
+      - FRED_API_KEY=${FRED_API_KEY}
+    
+  jupyter:
+    build: .
+    ports:
+      - "8888:8888"
+    volumes:
+      - .:/app
+    command: jupyter lab --ip=0.0.0.0 --port=8888 --no-browser --allow-root
+    environment:
+      - WEATHER_API_KEY=${WEATHER_API_KEY}
+      - FRED_API_KEY=${FRED_API_KEY}
